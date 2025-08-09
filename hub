@@ -1,5 +1,5 @@
 -- Khalexis Hub - Script Hub para Roblox com sistema de key antes de abrir o hub
--- Key necessária: "khalexis10k"
+-- Key necessária: "khalexisrumo10k"
 -- Mensagem de erro: "Key incorreta"
 -- Funcionalidade adicional: toggle com tecla "K" para abrir/fechar o hub diretamente,
 -- exibindo mensagem animada de minimizado no canto inferior direito, que dura 15 segundos antes de desaparecer.
@@ -256,7 +256,7 @@ local function createKeyFrame()
 
     EnterButton.MouseButton1Click:Connect(function()
         local typedKey = KeyBox.Text:gsub("%s", ""):lower()
-        if typedKey == "khalexis10k" then
+        if typedKey == "khalexisrumo10k" then
             frame:Destroy()
             showLoadingScreenAndCreateHub()
         else
