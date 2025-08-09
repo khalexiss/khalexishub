@@ -1,0 +1,761 @@
+-- Khalexis Hub - Script Hub para Roblox com sistema de key antes de abrir o hub
+-- Key necessária: "khalexis10k"
+-- Mensagem de erro: "Key incorreta"
+-- Funcionalidade adicional: toggle com tecla "K" para abrir/fechar o hub diretamente,
+-- exibindo mensagem animada de minimizado no canto inferior direito, que dura 15 segundos antes de desaparecer.
+
+local function applyRoundedCorners(frame, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 8)
+    corner.Parent = frame
+end
+
+local TweenService = game:GetService("TweenService")
+local player = game:GetService("Players").LocalPlayer
+local userId = player.UserId
+local userName = player.Name
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KhalexisHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game.CoreGui
+
+-- Definindo cor preta uniforme para todas as interfaces
+local BLACK_COLOR = Color3.fromRGB(30, 30, 30)
+local CATEGORY_BG_COLOR = Color3.fromRGB(50, 50, 50)
+local CATEGORY_BTN_COLOR = Color3.fromRGB(90, 90, 90)
+local SCRIPT_BTN_COLOR = Color3.fromRGB(70, 70, 70)
+local TITLEBAR_COLOR = Color3.fromRGB(45, 45, 45)
+local CLOSE_BTN_COLOR = Color3.fromRGB(80, 0, 0)
+local TEXT_COLOR = Color3.fromRGB(220, 220, 220)
+local ERROR_COLOR = Color3.fromRGB(255, 85, 85)
+local FOOTER_TEXT_COLOR = Color3.fromRGB(170, 170, 170)
+local MSG_BG_COLOR = Color3.fromRGB(0, 0, 0)
+local MSG_TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+
+local KeyFrame, MainFrame -- definidas globalmente para manipulação toggle
+local LoadingScreen, stopLoadingAnim
+
+-- GUARDANDO SE O HUB ESTÁ ABERTO
+local hubOpen = false
+
+-----------------------------------
+-- MENSAGEM MINIMIZADA COM ANIMAÇÃO
+-----------------------------------
+
+local MinimizedMessageFrame = Instance.new("Frame")
+MinimizedMessageFrame.Name = "MinimizedMessage"
+MinimizedMessageFrame.Size = UDim2.new(0, 300, 0, 40)
+-- Start off-screen à direita
+MinimizedMessageFrame.Position = UDim2.new(1, 310, 1, -50)
+MinimizedMessageFrame.BackgroundColor3 = MSG_BG_COLOR
+MinimizedMessageFrame.BorderSizePixel = 0
+MinimizedMessageFrame.AnchorPoint = Vector2.new(0, 0)
+MinimizedMessageFrame.Visible = false
+MinimizedMessageFrame.Parent = ScreenGui
+applyRoundedCorners(MinimizedMessageFrame, 8)
+
+local MinimizedMessageLabel = Instance.new("TextLabel")
+MinimizedMessageLabel.Size = UDim2.new(1, -20, 1, 0)
+MinimizedMessageLabel.Position = UDim2.new(0, 10, 0, 0)
+MinimizedMessageLabel.BackgroundTransparency = 1
+MinimizedMessageLabel.TextColor3 = MSG_TEXT_COLOR
+MinimizedMessageLabel.Font = Enum.Font.GothamBold
+MinimizedMessageLabel.TextSize = 16
+MinimizedMessageLabel.Text = "Khalexis Hub foi minimizado, para abrir novamente pressione K"
+MinimizedMessageLabel.TextWrapped = true
+MinimizedMessageLabel.TextXAlignment = Enum.TextXAlignment.Left
+MinimizedMessageLabel.TextYAlignment = Enum.TextYAlignment.Center
+MinimizedMessageLabel.Parent = MinimizedMessageFrame
+
+-- Tween para mostrar a mensagem deslizando da direita para dentro e depois desaparecer deslizando para direita
+local function showMinimizedMessage()
+    if MinimizedMessageFrame.Visible then return end
+    MinimizedMessageFrame.Visible = true
+    MinimizedMessageFrame.Position = UDim2.new(1, 310, 1, -50)
+    local tweenIn = TweenService:Create(
+        MinimizedMessageFrame,
+        TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Position = UDim2.new(1, -310, 1, -50)}
+    )
+    tweenIn:Play()
+    tweenIn.Completed:Wait()
+
+    -- Mantém visível por 15 segundos
+    wait(15)
+
+    local tweenOut = TweenService:Create(
+        MinimizedMessageFrame,
+        TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+        {Position = UDim2.new(1, 310, 1, -50)}
+    )
+    tweenOut:Play()
+    tweenOut.Completed:Wait()
+
+    MinimizedMessageFrame.Visible = false
+end
+
+------------------------------
+-- FUNÇÃO ERROR LABEL GENERICA
+------------------------------
+local ErrorLabel -- atribuída na KeyFrame para uso global
+
+local function showError(msg)
+    if ErrorLabel then
+        ErrorLabel.Text = msg
+        spawn(function()
+            wait(2)
+            if ErrorLabel then
+                ErrorLabel.Text = ""
+            end
+        end)
+    end
+end
+
+-------------------------
+-- COPIAR PARA O CLIPBOARD
+-------------------------
+local function copyToClipboard(text)
+    local success, err = pcall(function()
+        if setclipboard then
+            setclipboard(text)
+        elseif toclipboard then
+            toclipboard(text)
+        else
+            error("Clipboard function not available")
+        end
+    end)
+    return success, err
+end
+
+----------------------------
+-- CRIAR TELA DE INSERÇÃO DE KEY
+----------------------------
+local function createKeyFrame()
+    local frame = Instance.new("Frame")
+    frame.Name = "KeyFrame"
+    frame.Size = UDim2.new(0, 350, 0, 230)
+    frame.Position = UDim2.new(0.5, -175, 0.5, -115)
+    frame.BackgroundColor3 = BLACK_COLOR
+    frame.BorderSizePixel = 0
+    frame.Parent = ScreenGui
+    applyRoundedCorners(frame, 12)
+
+    local KeyTitle = Instance.new("TextLabel")
+    KeyTitle.Name = "KeyTitle"
+    KeyTitle.Size = UDim2.new(1, 0, 0, 36)
+    KeyTitle.BackgroundTransparency = 1
+    KeyTitle.Text = "🔒 COLE NO ESPAÇO ABAIXO A SUA KEY 🔒"
+    KeyTitle.Font = Enum.Font.GothamBold
+    KeyTitle.TextSize = 16
+    KeyTitle.TextYAlignment = Enum.TextYAlignment.Center
+    KeyTitle.TextXAlignment = Enum.TextXAlignment.Center
+    KeyTitle.Parent = frame
+
+    local ByLabel = Instance.new("TextLabel")
+    ByLabel.Name = "ByLabel"
+    ByLabel.Size = UDim2.new(1, 0, 0, 20)
+    ByLabel.Position = UDim2.new(0, 0, 0, 40)
+    ByLabel.BackgroundTransparency = 1
+    ByLabel.TextColor3 = FOOTER_TEXT_COLOR
+    ByLabel.Font = Enum.Font.Gotham
+    ByLabel.TextSize = 12
+    ByLabel.Text = "by khalexis"
+    ByLabel.TextXAlignment = Enum.TextXAlignment.Center
+    ByLabel.TextYAlignment = Enum.TextYAlignment.Top
+    ByLabel.Parent = frame
+
+    -- Efeito rainbow só no título
+    do
+        local hue = 0
+        RunService.RenderStepped:Connect(function(deltaTime)
+            hue = (hue + deltaTime * 0.5) % 1
+            if KeyTitle.Parent == frame then
+                KeyTitle.TextColor3 = Color3.fromHSV(hue, 1, 1)
+            end
+        end)
+    end
+
+    local KeyBox = Instance.new("TextBox")
+    KeyBox.Name = "KeyBox"
+    KeyBox.Size = UDim2.new(1, -40, 0, 40)
+    KeyBox.Position = UDim2.new(0, 20, 0, 65)
+    KeyBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    KeyBox.TextColor3 = TEXT_COLOR
+    KeyBox.Font = Enum.Font.Gotham
+    KeyBox.TextSize = 18
+    KeyBox.ClearTextOnFocus = false
+    KeyBox.Text = ""
+    KeyBox.PlaceholderText = ""
+    applyRoundedCorners(KeyBox, 8)
+    KeyBox.Parent = frame
+
+    local EnterButton = Instance.new("TextButton")
+    EnterButton.Name = "EnterButton"
+    EnterButton.Size = UDim2.new(0, 100, 0, 35)
+    EnterButton.Position = UDim2.new(0.5, -50, 0, 110)
+    EnterButton.BackgroundColor3 = SCRIPT_BTN_COLOR
+    EnterButton.TextColor3 = TEXT_COLOR
+    EnterButton.Font = Enum.Font.GothamBold
+    EnterButton.TextSize = 18
+    EnterButton.Text = "Confirmar"
+    applyRoundedCorners(EnterButton, 8)
+    EnterButton.Parent = frame
+
+    local PegarKeyButton = Instance.new("TextButton")
+    PegarKeyButton.Name = "PegarKeyButton"
+    PegarKeyButton.Size = UDim2.new(0, 80, 0, 28)
+    PegarKeyButton.Position = UDim2.new(0.5, -40, 0, 150)
+    PegarKeyButton.BackgroundColor3 = SCRIPT_BTN_COLOR
+    PegarKeyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    PegarKeyButton.Font = Enum.Font.GothamBold
+    PegarKeyButton.TextSize = 12
+    PegarKeyButton.Text = "Pegar Key"
+    applyRoundedCorners(PegarKeyButton, 8)
+    PegarKeyButton.Parent = frame
+
+    local InfoText = Instance.new("TextLabel")
+    InfoText.Name = "InfoText"
+    InfoText.Size = UDim2.new(1, -20, 0, 30)
+    InfoText.Position = UDim2.new(0, 10, 0, 185)
+    InfoText.BackgroundTransparency = 1
+    InfoText.Font = Enum.Font.GothamBold
+    InfoText.TextSize = 12
+    InfoText.Text = "CLIQUE EM PEGAR KEY\nE COLE O LINK NO SEU NAVEGADOR PARA PEGA-LA"
+    InfoText.TextWrapped = true
+    InfoText.TextXAlignment = Enum.TextXAlignment.Center
+    InfoText.TextYAlignment = Enum.TextYAlignment.Top
+    InfoText.Parent = frame
+
+    -- Rainbow para InfoText também
+    do
+        local hue = 0
+        RunService.RenderStepped:Connect(function(deltaTime)
+            hue = (hue + deltaTime * 0.5) % 1
+            if InfoText.Parent == frame then
+                InfoText.TextColor3 = Color3.fromHSV(hue, 1, 1)
+            end
+        end)
+    end
+
+    ErrorLabel = Instance.new("TextLabel")
+    ErrorLabel.Name = "ErrorLabel"
+    ErrorLabel.Size = UDim2.new(1, 0, 0, 25)
+    ErrorLabel.Position = UDim2.new(0, 0, 1, -95)
+    ErrorLabel.BackgroundTransparency = 1
+    ErrorLabel.TextColor3 = ERROR_COLOR
+    ErrorLabel.Font = Enum.Font.GothamBold
+    ErrorLabel.TextSize = 16
+    ErrorLabel.Text = ""
+    ErrorLabel.Parent = frame
+
+    local function showErrorLocal(msg)
+        ErrorLabel.Text = msg
+        spawn(function()
+            wait(2)
+            if ErrorLabel.Parent == frame then
+                ErrorLabel.Text = ""
+            end
+        end)
+    end
+
+    -- Eventos
+    PegarKeyButton.MouseButton1Click:Connect(function()
+        local discordLink = "discord.gg/aNaFpb2Qsb"
+        local success = copyToClipboard(discordLink)
+        if success then
+            PegarKeyButton.Text = "Link copiado!"
+            wait(2)
+            PegarKeyButton.Text = "Pegar Key"
+        else
+            showErrorLocal("Falha ao copiar. Copie manualmente: " .. discordLink)
+        end
+    end)
+
+    EnterButton.MouseButton1Click:Connect(function()
+        local typedKey = KeyBox.Text:gsub("%s", ""):lower()
+        if typedKey == "khalexis10k" then
+            frame:Destroy()
+            showLoadingScreenAndCreateHub()
+        else
+            showErrorLocal("Key incorreta")
+        end
+    end)
+
+    return frame, showErrorLocal, EnterButton, KeyBox
+end
+
+--------------------------------------
+-- TELA DE CARREGAMENTO COM UMA BOLA
+--------------------------------------
+local function showLoadingScreen()
+    local loadingFrame = Instance.new("Frame")
+    loadingFrame.Name = "LoadingFrame"
+    loadingFrame.Size = UDim2.new(0, 300, 0, 120)
+    loadingFrame.Position = UDim2.new(0.5, -150, 0.5, -60)
+    loadingFrame.BackgroundColor3 = BLACK_COLOR
+    loadingFrame.BorderSizePixel = 0
+    loadingFrame.Parent = ScreenGui
+    applyRoundedCorners(loadingFrame, 16)
+
+    local loadingLabel = Instance.new("TextLabel")
+    loadingLabel.Name = "LoadingLabel"
+    loadingLabel.Size = UDim2.new(1, 0, 0, 30)
+    loadingLabel.Position = UDim2.new(0, 0, 0.3, -15)
+    loadingLabel.BackgroundTransparency = 1
+    loadingLabel.Text = "Carregando..."
+    loadingLabel.TextColor3 = TEXT_COLOR
+    loadingLabel.Font = Enum.Font.GothamBold
+    loadingLabel.TextSize = 20
+    loadingLabel.Parent = loadingFrame
+
+    local spinner = Instance.new("Frame")
+    spinner.Size = UDim2.new(0, 50, 0, 50)
+    spinner.Position = UDim2.new(0.5, -25, 0, 60)
+    spinner.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- fundo branco
+    spinner.BorderSizePixel = 0
+    applyRoundedCorners(spinner, 25)
+    spinner.Parent = loadingFrame
+
+    local orangeBall = Instance.new("Frame")
+    orangeBall.Size = UDim2.new(0, 50, 0, 50)
+    orangeBall.Position = UDim2.new(0, 0, 0, 0)
+    orangeBall.BackgroundColor3 = Color3.fromRGB(255, 140, 0) -- laranja
+    applyRoundedCorners(orangeBall, 25)
+    orangeBall.Parent = spinner
+
+    local whiteBall = Instance.new("Frame")
+    whiteBall.Size = UDim2.new(0, 20, 0, 20)
+    whiteBall.Position = UDim2.new(0.5, -10, 0.5, -10)
+    whiteBall.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    applyRoundedCorners(whiteBall, 10)
+    whiteBall.Parent = orangeBall
+
+    local rs = game:GetService("RunService")
+    local angle = 0
+    local conn
+
+    conn = rs.RenderStepped:Connect(function()
+        angle = (angle + 6) % 360
+        orangeBall.Rotation = angle
+        whiteBall.Rotation = -angle * 2
+    end)
+
+    return loadingFrame, function()
+        if conn then
+            conn:Disconnect()
+            conn = nil
+        end
+    end
+end
+
+------------------------------------------------------
+-- FUNÇÃO PARA CRIAR O HUB PRINCIPAL (UI DOS SCRIPTS ETC)
+------------------------------------------------------
+local function createHub()
+    local frame = Instance.new("Frame")
+    frame.Name = "MainFrame"
+    frame.Size = UDim2.new(0, 480, 0, 380)
+    frame.Position = UDim2.new(0.5, -240, 0.5, -190)
+    frame.BackgroundColor3 = BLACK_COLOR
+    frame.BorderSizePixel = 0
+    frame.Parent = ScreenGui
+    applyRoundedCorners(frame, 12)
+
+    -- Title Bar
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Name = "TitleBar"
+    TitleBar.Size = UDim2.new(1, 0, 0, 35)
+    TitleBar.BackgroundColor3 = TITLEBAR_COLOR
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Parent = frame
+    applyRoundedCorners(TitleBar, 12)
+
+    local Title = Instance.new("TextLabel")
+    Title.Name = "Title"
+    Title.Size = UDim2.new(1, 0, 1, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "Khalexis Hub"
+    Title.TextColor3 = TEXT_COLOR
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 20
+    Title.TextXAlignment = Enum.TextXAlignment.Center
+    Title.TextYAlignment = Enum.TextYAlignment.Center
+    Title.Parent = TitleBar
+
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Name = "CloseButton"
+    CloseButton.Size = UDim2.new(0, 35, 0, 35)
+    CloseButton.Position = UDim2.new(1, -35, 0, 0)
+    CloseButton.BackgroundColor3 = CLOSE_BTN_COLOR
+    CloseButton.TextColor3 = Color3.new(1, 1, 1)
+    CloseButton.Font = Enum.Font.GothamBold
+    CloseButton.TextSize = 20
+    CloseButton.Text = "✕"
+    applyRoundedCorners(CloseButton, 8)
+    CloseButton.Parent = TitleBar
+
+    CloseButton.MouseButton1Click:Connect(function()
+        frame:Destroy()
+        hubOpen = false
+        showMinimizedMessage()
+    end)
+
+    -- Frames de categorias e scripts
+    local CategoryFrame = Instance.new("ScrollingFrame")
+    CategoryFrame.Name = "CategoryFrame"
+    CategoryFrame.Size = UDim2.new(0, 180, 1, -115)
+    CategoryFrame.Position = UDim2.new(0, 0, 0, 35)
+    CategoryFrame.BackgroundColor3 = CATEGORY_BG_COLOR
+    CategoryFrame.BorderSizePixel = 0
+    CategoryFrame.ScrollBarThickness = 6
+    CategoryFrame.Parent = frame
+    applyRoundedCorners(CategoryFrame, 12)
+
+    local CategoryContainer = Instance.new("Frame")
+    CategoryContainer.Name = "CategoryContainer"
+    CategoryContainer.Size = UDim2.new(1, -20, 1, 0)
+    CategoryContainer.Position = UDim2.new(0, 10, 0, 0)
+    CategoryContainer.BackgroundTransparency = 1
+    CategoryContainer.Parent = CategoryFrame
+    CategoryContainer.ClipsDescendants = true
+
+    local UIListLayoutCat = Instance.new("UIListLayout")
+    UIListLayoutCat.Padding = UDim.new(0, 10)
+    UIListLayoutCat.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayoutCat.FillDirection = Enum.FillDirection.Vertical
+    UIListLayoutCat.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    UIListLayoutCat.Parent = CategoryContainer
+
+    local ScriptFrame = Instance.new("ScrollingFrame")
+    ScriptFrame.Name = "ScriptFrame"
+    ScriptFrame.Size = UDim2.new(1, -210, 1, -115)
+    ScriptFrame.Position = UDim2.new(0, 210, 0, 35)
+    ScriptFrame.BackgroundColor3 = BLACK_COLOR
+    ScriptFrame.BorderSizePixel = 0
+    ScriptFrame.ScrollBarThickness = 6
+    ScriptFrame.Parent = frame
+    applyRoundedCorners(ScriptFrame, 16)
+
+    local ScriptContainer = Instance.new("Frame")
+    ScriptContainer.Name = "ScriptContainer"
+    ScriptContainer.Size = UDim2.new(1, -20, 0, 0)
+    ScriptContainer.Position = UDim2.new(0, 10, 0, 0)
+    ScriptContainer.BackgroundTransparency = 1
+    ScriptContainer.Parent = ScriptFrame
+    ScriptContainer.ClipsDescendants = true
+
+    local UIListLayoutScript = Instance.new("UIListLayout")
+    UIListLayoutScript.Padding = UDim.new(0, 10)
+    UIListLayoutScript.SortOrder = Enum.SortOrder.LayoutOrder
+    UIListLayoutScript.FillDirection = Enum.FillDirection.Vertical
+    UIListLayoutScript.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    UIListLayoutScript.Parent = ScriptContainer
+
+    UIListLayoutScript:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        ScriptContainer.Size = UDim2.new(1, -20, 0, UIListLayoutScript.AbsoluteContentSize.Y)
+    end)
+
+    local FooterContainer = Instance.new("Frame")
+    FooterContainer.Name = "FooterContainer"
+    FooterContainer.Size = UDim2.new(1, 0, 0, 80)
+    FooterContainer.Position = UDim2.new(0, 0, 1, -80)
+    FooterContainer.BackgroundTransparency = 1
+    FooterContainer.Parent = frame
+
+    local FooterText = Instance.new("TextLabel")
+    FooterText.Name = "FooterText"
+    FooterText.Text = "By Khalexis"
+    FooterText.Font = Enum.Font.GothamBold
+    FooterText.TextSize = 14
+    FooterText.TextColor3 = FOOTER_TEXT_COLOR
+    FooterText.BackgroundTransparency = 1
+    FooterText.Size = UDim2.new(0, 150, 0, 25)
+    FooterText.Position = UDim2.new(0.5, -75, 0, 0)
+    FooterText.Parent = FooterContainer
+
+    local YouTubeLabel = Instance.new("TextLabel")
+    YouTubeLabel.Name = "YouTubeLabel"
+    YouTubeLabel.Text = "Youtube: Khalexis"
+    YouTubeLabel.Font = Enum.Font.Gotham
+    YouTubeLabel.TextSize = 12
+    YouTubeLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    YouTubeLabel.BackgroundTransparency = 1
+    YouTubeLabel.Size = UDim2.new(0, 150, 0, 25)
+    YouTubeLabel.Position = UDim2.new(1, -160, 0, 0)
+    YouTubeLabel.TextXAlignment = Enum.TextXAlignment.Right
+    YouTubeLabel.Parent = FooterContainer
+
+    local DiscordLabel = Instance.new("TextLabel")
+    DiscordLabel.Name = "DiscordLabel"
+    DiscordLabel.Text = "Discord: discord.gg/aNaFpb2Qsb"
+    DiscordLabel.Font = Enum.Font.Gotham
+    DiscordLabel.TextSize = 12
+    DiscordLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    DiscordLabel.BackgroundTransparency = 1
+    DiscordLabel.Size = UDim2.new(0, 180, 0, 25)
+    DiscordLabel.Position = UDim2.new(1, -185, 0, 30)
+    DiscordLabel.TextXAlignment = Enum.TextXAlignment.Right
+    DiscordLabel.Parent = FooterContainer
+
+    local DudaLabel = Instance.new("TextLabel")
+    DudaLabel.Name = "DudaLabel"
+    DudaLabel.Text = "Se tiver alguma dúvida entre no Discord!"
+    DudaLabel.Font = Enum.Font.Gotham
+    DudaLabel.TextSize = 10
+    DudaLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    DudaLabel.BackgroundTransparency = 1
+    DudaLabel.Size = UDim2.new(0, 200, 0, 15)
+    DudaLabel.Position = UDim2.new(1, -210, 0, 55)
+    DudaLabel.TextXAlignment = Enum.TextXAlignment.Right
+    DudaLabel.Parent = FooterContainer
+
+    local PlayerInfoFrame = Instance.new("Frame")
+    PlayerInfoFrame.Name = "PlayerInfoFrame"
+    PlayerInfoFrame.Size = UDim2.new(0, 150, 0, 40)
+    PlayerInfoFrame.Position = UDim2.new(0, 10, 1, -50)
+    PlayerInfoFrame.BackgroundTransparency = 1
+    PlayerInfoFrame.Parent = frame
+
+    local AvatarImage = Instance.new("ImageLabel")
+    AvatarImage.Name = "AvatarImage"
+    AvatarImage.Size = UDim2.new(0, 36, 0, 36)
+    AvatarImage.Position = UDim2.new(0, 0, 0, 2)
+    AvatarImage.BackgroundColor3 = SCRIPT_BTN_COLOR
+    AvatarImage.BorderSizePixel = 0
+    AvatarImage.Parent = PlayerInfoFrame
+    AvatarImage.ScaleType = Enum.ScaleType.Fit
+    applyRoundedCorners(AvatarImage, 18)
+
+    local thumbType = Enum.ThumbnailType.HeadShot
+    local thumbSize = Enum.ThumbnailSize.Size48x48
+    local content, _ = game.Players:GetUserThumbnailAsync(userId, thumbType, thumbSize)
+    AvatarImage.Image = content
+
+    local PlayerNameLabel = Instance.new("TextLabel")
+    PlayerNameLabel.Name = "PlayerNameLabel"
+    PlayerNameLabel.Size = UDim2.new(1, -40, 1, 0)
+    PlayerNameLabel.Position = UDim2.new(0, 40, 0, 0)
+    PlayerNameLabel.BackgroundTransparency = 1
+    PlayerNameLabel.Text = userName
+    PlayerNameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    PlayerNameLabel.Font = Enum.Font.Gotham
+    PlayerNameLabel.TextSize = 16
+    PlayerNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    PlayerNameLabel.Parent = PlayerInfoFrame
+
+    -- Funções para controle de scripts na interface
+    local function clearScripts()
+        for _, child in pairs(ScriptContainer:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("TextLabel") then
+                child:Destroy()
+            end
+        end
+    end
+
+    local function createScriptButton(name, scriptFunc)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, 0, 0, 35)
+        button.BackgroundColor3 = SCRIPT_BTN_COLOR
+        button.BorderSizePixel = 0
+        button.TextColor3 = TEXT_COLOR
+        button.Font = Enum.Font.Gotham
+        button.TextSize = 16
+        button.Text = name
+        button.TextXAlignment = Enum.TextXAlignment.Center
+        button.Parent = ScriptContainer
+        applyRoundedCorners(button, 12)
+
+        button.MouseButton1Click:Connect(function()
+            button.Text = "Executando..."
+            button.Active = false
+            button.AutoButtonColor = false
+            spawn(function()
+                pcall(scriptFunc)
+                wait(1)
+                if frame and frame.Parent then
+                    frame:Destroy()
+                    hubOpen = false
+                    showMinimizedMessage()
+                end
+            end)
+        end)
+
+        return button
+    end
+
+    local function createUpdateText(text)
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 80)
+        label.BackgroundTransparency = 1
+        label.TextColor3 = TEXT_COLOR
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 16
+        label.Text = text
+        label.TextWrapped = true
+        label.TextXAlignment = Enum.TextXAlignment.Center
+        label.TextYAlignment = Enum.TextYAlignment.Top
+        label.Position = UDim2.new(0, 0, 0, 15)
+        label.Parent = ScriptContainer
+        return label
+    end
+
+    local function createCategoryButton(name, scriptsOrText)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, 0, 0, 28)
+        button.BackgroundColor3 = CATEGORY_BTN_COLOR
+        button.BorderSizePixel = 0
+        button.TextColor3 = Color3.fromRGB(230, 230, 230)
+        button.Font = Enum.Font.Gotham
+        button.TextSize = 11
+        button.Text = name
+        button.TextXAlignment = Enum.TextXAlignment.Center
+        button.Parent = CategoryContainer
+        applyRoundedCorners(button, 8)
+
+        button.MouseButton1Click:Connect(function()
+            clearScripts()
+            if typeof(scriptsOrText) == "table" then
+                for _, scriptInfo in pairs(scriptsOrText) do
+                    createScriptButton(scriptInfo.Name, scriptInfo.Func)
+                end
+            elseif typeof(scriptsOrText) == "string" then
+                createUpdateText(scriptsOrText)
+            end
+        end)
+
+        return button
+    end
+
+    -- Scripts pré-definidos
+    local stealScripts = {
+        {
+            Name = "Delfi Script",
+            Func = function()
+                loadstring(game:HttpGet('https://pastefy.app/8XQTsrZK/raw'))()
+            end
+        }
+    }
+
+    local noiteScripts = {
+        {
+            Name = "Vex Op",
+            Func = function()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/yoursvexyyy/VEX-OP/refs/heads/main/99%20nights%20in%20the%20forest"))()
+            end
+        }
+    }
+
+    local updatesText = [[
+Khalexis Hub V0.1
+- Novo Script Steal a Brainrot
+- Novo Script 99 Noites
+]]
+
+    -- Criar botões categorias e scripts
+    local updatesCategoryButton = createCategoryButton("Atualizações", updatesText)
+    local stealCategoryButton = createCategoryButton("Steal a Brainrot Scripts", stealScripts)
+    local noiteCategoryButton = createCategoryButton("99 Noites na Floresta Script", noiteScripts)
+
+    -- Inicializar mostrando categoria Steal
+    stealCategoryButton.MouseButton1Click:Fire()
+
+    -- Drag support para o frame
+    local dragging, dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        local screenSize = workspace.CurrentCamera.ViewportSize
+        local frameSize = frame.AbsoluteSize
+        local x = math.clamp(newPos.X.Offset, 0, screenSize.X - frameSize.X)
+        local y = math.clamp(newPos.Y.Offset, 0, screenSize.Y - frameSize.Y)
+        frame.Position = UDim2.new(0, x, 0, y)
+    end
+
+    local function startDrag(input)
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+
+    TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            startDrag(input)
+        end
+    end)
+
+    frame.InputBegan:Connect(function(input)
+        local relativeY = input.Position.Y - frame.AbsolutePosition.Y
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and relativeY <= 35 then
+            startDrag(input)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            update(input)
+        end
+    end)
+
+    return frame
+end
+
+-----------------------------------
+-- FUNÇÃO PARA MOSTRAR LOADING E CRIAR HUB
+-----------------------------------
+function showLoadingScreenAndCreateHub()
+    LoadingScreen, stopLoadingAnim = showLoadingScreen()
+    wait(2)
+    if stopLoadingAnim then stopLoadingAnim() end
+    if LoadingScreen and LoadingScreen.Parent then LoadingScreen:Destroy() end
+    MainFrame = createHub()
+    hubOpen = true
+end
+
+--------------------------
+-- INICIALIZA KEYFRAME
+--------------------------
+KeyFrame, showError, EnterButton, KeyBox = createKeyFrame()
+
+-- TOGGLE COM TECLA "K" PARA ABRIR/FECHAR DIRETO HUB SEM KEY
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.K then
+        if hubOpen then
+            -- Fechar hub aberto
+            if MainFrame and MainFrame.Parent then
+                MainFrame:Destroy()
+                hubOpen = false
+            end
+            showMinimizedMessage()
+        else
+            -- Abrir hub direto, destruir keyframe e loading caso existam
+            if KeyFrame and KeyFrame.Parent then
+                KeyFrame:Destroy()
+            end
+            if LoadingScreen and LoadingScreen.Parent then
+                if stopLoadingAnim then stopLoadingAnim() end
+                LoadingScreen:Destroy()
+            end
+            MainFrame = createHub()
+            hubOpen = true
+        end
+    elseif input.KeyCode == Enum.KeyCode.Escape then
+        -- Clear key input e erro
+        if KeyBox then
+            KeyBox.Text = ""
+        end
+        if showError then
+            showError("")
+        end
+    end
+end)
